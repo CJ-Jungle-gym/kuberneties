@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EKS (Single AZ with Two Subnets Trick)
+
+Resources:
+  # VPC
+  DevVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: DevVPC
+
+  # Public Subnet 
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DevVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: ap-northeast-2a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet
+
+  # Private Subnet 
+  EKSPrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DevVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: ap-northeast-2a 
+      Tags:
+        - Key: Name
+          Value: EKSPrivateSubnetA
+
+  EKSPrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DevVPC
+      CidrBlock: 10.0.3.0/24  
+      AvailabilityZone: ap-northeast-2a  
+      Tags:
+        - Key: Name
+          Value: EKSPrivateSubnetB
+
+  # Internet Gateway
+  DevIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: DevIGW
+
+  AttachIGW:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref DevVPC
+      InternetGatewayId: !Ref DevIGW
+
+  # Route Table for Public Subnet
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DevVPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref DevIGW
+
+  AssociatePublicSubnet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # NAT Gateway
+  NatEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId  
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: DevNGW
+
+  # Private Route Table
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DevVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  AssociatePrivateSubnetA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EKSPrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  AssociatePrivateSubnetB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EKSPrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  # EKS 
+  DevEKS:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: DevEKS
+      RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/EKSRole"
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !Ref EKSPrivateSubnetA
+          - !Ref EKSPrivateSubnetB
+      Tags:
+        - Key: Name
+          Value: DevEKS
+
+Outputs:
+  VPCId:
+    Value: !Ref DevVPC
+  EKSClusterName:
+    Value: !Ref DevEKS
