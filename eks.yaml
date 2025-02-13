@@ -1,5 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: EKS (Single AZ with Two Subnets Trick)
+Description: EKS with RDS Multi-AZ
+
+Parameters:
+  ExistingEKSRole:
+    Type: String
+    Default: ""
+    Description: "If an existing IAM role name is provided, the stack will use that instead of creating a new one."
+
+  ExistingEKSLogGroup:
+    Type: String
+    Default: "/aws/eks/DevEKS/cluster"
+    Description: "Existing EKS LogGroup to use instead of creating a new one"
+
+Conditions:
+  CreateNewEKSRole: !Equals [ !Ref ExistingEKSRole, "" ]
+  CreateNewLogGroup: !Equals [ !Ref ExistingEKSLogGroup, "" ]
 
 Resources:
   # VPC
@@ -13,7 +28,7 @@ Resources:
         - Key: Name
           Value: DevVPC
 
-  # Public Subnet 
+  # Public Subnet (NAT Gateway)
   PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
@@ -25,13 +40,13 @@ Resources:
         - Key: Name
           Value: PublicSubnet
 
-  # Private Subnet 
+  # EKS Private Subnets
   EKSPrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DevVPC
       CidrBlock: 10.0.2.0/24
-      AvailabilityZone: ap-northeast-2a 
+      AvailabilityZone: ap-northeast-2a
       Tags:
         - Key: Name
           Value: EKSPrivateSubnetA
@@ -40,11 +55,32 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DevVPC
-      CidrBlock: 10.0.3.0/24  
-      AvailabilityZone: ap-northeast-2a  
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: ap-northeast-2c
       Tags:
         - Key: Name
           Value: EKSPrivateSubnetB
+
+  # RDS Private Subnets
+  RDSPrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DevVPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: ap-northeast-2a
+      Tags:
+        - Key: Name
+          Value: RDSPrivateSubnetA
+
+  RDSPrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DevVPC
+      CidrBlock: 10.0.5.0/24
+      AvailabilityZone: ap-northeast-2c
+      Tags:
+        - Key: Name
+          Value: RDSPrivateSubnetB
 
   # Internet Gateway
   DevIGW:
@@ -60,7 +96,22 @@ Resources:
       VpcId: !Ref DevVPC
       InternetGatewayId: !Ref DevIGW
 
-  # Route Table for Public Subnet
+  # NAT Gateway
+  NatEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId  
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: DevNGW
+
+  # Route Tables
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -82,22 +133,6 @@ Resources:
       SubnetId: !Ref PublicSubnet
       RouteTableId: !Ref PublicRouteTable
 
-  # NAT Gateway
-  NatEIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-
-  NatGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NatEIP.AllocationId  
-      SubnetId: !Ref PublicSubnet
-      Tags:
-        - Key: Name
-          Value: DevNGW
-
-  # Private Route Table
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -125,12 +160,20 @@ Resources:
       SubnetId: !Ref EKSPrivateSubnetB
       RouteTableId: !Ref PrivateRouteTable
 
-  # EKS 
+  # EKS cluster
   DevEKS:
     Type: AWS::EKS::Cluster
     Properties:
       Name: DevEKS
-      RoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/EKSRole"
+      RoleArn: !GetAtt EKSRole.Arn
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+            - Type: authenticator
+            - Type: controllerManager
+            - Type: scheduler
       ResourcesVpcConfig:
         SubnetIds:
           - !Ref EKSPrivateSubnetA
@@ -139,8 +182,260 @@ Resources:
         - Key: Name
           Value: DevEKS
 
+   # ALB controller launch
+  ALBControllerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "ALBControllerTemplate-${AWS::StackName}"
+      LaunchTemplateData:
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            if [ ! -f "/tmp/alb_installed" ]; then
+              touch /tmp/alb_installed
+              set -o xtrace
+              yum install -y aws-cli jq
+              # AWS CLI NEW version install
+              curl -sL https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json > /tmp/iam_policy.json
+              aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file:///tmp/iam_policy.json
+              # AWS Load Balancer Controller install
+              kubectl apply -k github.com/aws/eks-charts/stable/aws-load-balancer-controller//crds?ref=master
+              helm repo add eks https://aws.github.io/eks-charts
+              helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+                --set clusterName=${DevEKS} \
+                --set serviceAccount.create=false \
+                --set serviceAccount.name=aws-load-balancer-controller
+            fi
+
+              # Fluent Bit install (EKS log -> CloudWatch)
+              kubectl create namespace logging
+              helm repo add fluent https://fluent.github.io/helm-charts
+              helm install fluent-bit fluent/fluent-bit -n logging \
+                --set cloudWatch.enabled=true \
+                --set cloudWatch.logGroup=/aws/eks/${DevEKS}/logs \
+                --set cloudWatch.autoCreateGroup=true        
+  # EKS node group
+  EKSNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    DependsOn: ALBControllerLaunchTemplate
+    Properties:
+      ClusterName: !Ref DevEKS
+      NodeRole: !GetAtt EKSNodeRole.Arn
+      ScalingConfig:
+        MinSize: 2
+        MaxSize: 3
+        DesiredSize: 2
+      Subnets:
+        - !Ref EKSPrivateSubnetA
+        - !Ref EKSPrivateSubnetB
+      InstanceTypes:
+        - t3.medium
+      Tags:
+        Name: "EKSNodeGroup"
+      RemoteAccess:
+        Ec2SshKey: my-key-pair
+      LaunchTemplate:
+        Name: !Ref ALBControllerLaunchTemplate
+        Version: "1"
+  # ALB controller launch
+  ALBControllerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "ALBControllerTemplate-${AWS::StackName}"
+      LaunchTemplateData:
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            if [ ! -f "/tmp/alb_installed" ]; then
+              touch /tmp/alb_installed
+              set -o xtrace
+              yum install -y aws-cli jq
+              # AWS CLI NEW version install
+              curl -sL https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json > /tmp/iam_policy.json
+              aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file:///tmp/iam_policy.json
+              # AWS Load Balancer Controller install
+              kubectl apply -k github.com/aws/eks-charts/stable/aws-load-balancer-controller//crds?ref=master
+              helm repo add eks https://aws.github.io/eks-charts
+              helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+                --set clusterName=${DevEKS} \
+                --set serviceAccount.create=false \
+                --set serviceAccount.name=aws-load-balancer-controller
+            fi
+
+              # Fluent Bit install (EKS log -> CloudWatch)
+              kubectl create namespace logging
+              helm repo add fluent https://fluent.github.io/helm-charts
+              helm install fluent-bit fluent/fluent-bit -n logging \
+                --set cloudWatch.enabled=true \
+                --set cloudWatch.logGroup=/aws/eks/${DevEKS}/logs \
+                --set cloudWatch.autoCreateGroup=true
+
+  #EKS IAM ROLE
+  EKSRole:
+    Type: AWS::IAM::Role
+    Condition: CreateNewEKSRole
+    Properties:
+      RoleName: EKSRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+      Tags:
+        - Key: Name
+          Value: EKSRole
+
+  # EKS NODE IAM ROLE
+  EKSNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EKSNodeRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+         - Effect: Allow
+           Principal:
+             Service:
+               - ec2.amazonaws.com
+           Action:
+            - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Tags:
+       - Key: Name
+         Value: EKSNodeRole
+  # Cloudwatch role
+  CloudWatchLogsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: EKSCloudWatchLogsPolicy
+      Roles:
+        - !Ref EKSRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:DescribeLogStreams
+              - logs:PutLogEvents
+            Resource: 
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${ExistingEKSLogGroup}:*"
+  # EKS security
+  EKSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "EKS Cluster Security Group"
+      VpcId: !Ref DevVPC
+      Tags:
+        - Key: Name
+          Value: EKSSecurityGroup
+  # EKS log Group
+  # EKSLogGroup:
+  #   Type: AWS::Logs::LogGroup
+  #   Condition: CreateNewLogGroup
+  #   Properties:
+  #     LogGroupName: !If 
+  #       - CreateNewLogGroup
+  #       - !Sub "/aws/eks/${DevEKS}/cluster"
+  #       - !Ref ExistingEKSLogGroup
+  #     RetentionInDays: 30
+  #     Tags:
+  #       - Key: Name
+  #         Value: EKSLogGroup
+  #   DeletionPolicy: Retain
+  #ALB Controller Role
+  ALBControllerIAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: AWSLoadBalancerControllerIAMPolicy
+      Roles:
+        - !Ref ALBControllerRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: "*"
+            Resource: "*"
+
+  ALBControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ALBControllerRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+
+  # # RDS Subnet Group
+  # RDSSubnetGroup:
+  #   Type: AWS::RDS::DBSubnetGroup
+  #   Properties:
+  #     DBSubnetGroupName: dev-rds-subnet-group
+  #     DBSubnetGroupDescription: "RDS subnet group for Multi-AZ"
+  #     SubnetIds:
+  #       - !Ref RDSPrivateSubnetA
+  #       - !Ref RDSPrivateSubnetB
+  #     Tags:
+  #       - Key: Name
+  #         Value: RDSSubnetGroup
+
+  # # RDS Instance (Multi-AZ)
+  # DevRDS:
+  #   Type: AWS::RDS::DBInstance
+  #   Properties:
+  #     DBInstanceIdentifier: dev-rds
+  #     Engine: mysql
+  #     EngineVersion: "8.0"
+  #     DBInstanceClass: db.t3.micro
+  #     AllocatedStorage: 20
+  #     MultiAZ: true
+  #     MasterUsername: admin
+  #     MasterUserPassword: "SecurePassword123!"
+  #     DBSubnetGroupName: !Ref RDSSubnetGroup
+  #     VPCSecurityGroups:
+  #       - !Ref RDSSecurityGroup
+  #     Tags:
+  #       - Key: Name
+  #         Value: DevRDS
+  #   DeletionPolicy: Delete
+  # # RDS Security Group
+  # RDSSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: "Allow MySQL access from EKS nodes"
+  #     VpcId: !Ref DevVPC
+  #     SecurityGroupIngress:
+  #       - IpProtocol: tcp
+  #         FromPort: 3306
+  #         ToPort: 3306
+  #         SourceSecurityGroupId: !Ref EKSSecurityGroup
+  #     Tags:
+  #       - Key: Name
+  #         Value: RDSSecurityGroup
+
 Outputs:
   VPCId:
     Value: !Ref DevVPC
   EKSClusterName:
     Value: !Ref DevEKS
+  # RDSInstance:
+  #   Value: !Ref DevRDS
