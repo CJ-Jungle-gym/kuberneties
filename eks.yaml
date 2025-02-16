@@ -224,24 +224,60 @@ Resources:
       LaunchTemplateData:
         UserData:
           Fn::Base64: !Sub |
+            MIME-Version: 1.0
+            Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
+
+            --==MYBOUNDARY==
+            Content-Type: text/cloud-config; charset="us-ascii"
+
+            #cloud-config
+            packages:
+              - aws-cli
+              - jq
+
+            --==MYBOUNDARY==
+            Content-Type: text/x-shellscript; charset="us-ascii"
+
             #!/bin/bash
-            if [ ! -f "/tmp/alb_installed" ]; then
-              touch /tmp/alb_installed
-              set -o xtrace
-              yum install -y aws-cli jq
-              curl -sL https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json > /tmp/iam_policy.json
-              aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file:///tmp/iam_policy.json
-              kubectl apply -k github.com/aws/eks-charts/stable/aws-load-balancer-controller//crds?ref=master
-              helm repo add eks https://aws.github.io/eks-charts
-              helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-                --set clusterName=${DevEKS} \
-                --set serviceAccount.create=false \
-                --set serviceAccount.name=aws-load-balancer-controller
+            set -o xtrace
+
+            # Mark that ALB has been installed to prevent re-installation
+            touch /tmp/alb_installed
+
+            # Install AWS CLI & jq
+            yum install -y aws-cli jq
+
+            # Download and apply AWS Load Balancer Controller IAM policy
+            curl -sL https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json > /tmp/iam_policy.json
+            aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file:///tmp/iam_policy.json || echo "Policy already exists"
+
+            # Install Kubernetes tools
+            if ! command -v kubectl &> /dev/null
+            then
+              curl -o kubectl https://amazon-eks.s3.amazonaws.com/${AWS::Region}/latest/kubernetes_version/bin/linux/amd64/kubectl
+              chmod +x ./kubectl
+              mv ./kubectl /usr/local/bin/
             fi
+
+            # Install Helm
+            curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+            # Deploy AWS Load Balancer Controller
+            kubectl apply -k github.com/aws/eks-charts/stable/aws-load-balancer-controller//crds?ref=master
+            helm repo add eks https://aws.github.io/eks-charts
+            helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+              --set clusterName=${DevEKS} \
+              --set serviceAccount.create=false \
+              --set serviceAccount.name=aws-load-balancer-controller
+
+            --==MYBOUNDARY==--
+
 
   # EKS node group
   EKSNodeGroup:
     Type: AWS::EKS::Nodegroup
+    DependsOn:
+    - ALBControllerLaunchTemplate
     Properties:
       ClusterName: !Ref DevEKS
       NodeRole: !GetAtt EKSNodeRole.Arn
@@ -257,7 +293,7 @@ Resources:
       Tags:
         Name: "EKSNodeGroup"
       LaunchTemplate:
-        Name: !Ref ALBControllerLaunchTemplate
+        Id: !GetAtt ALBControllerLaunchTemplate.LaunchTemplateId
         Version: "1"
   
   #EKS IAM ROLE
