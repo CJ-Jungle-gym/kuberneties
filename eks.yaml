@@ -168,6 +168,8 @@ Resources:
             - Type: authenticator
             - Type: controllerManager
             - Type: scheduler
+      KubernetesNetworkConfig:
+        IpFamily: ipv4
       ResourcesVpcConfig:
         SubnetIds:
           - !Ref EKSPrivateSubnetA
@@ -216,7 +218,6 @@ Resources:
               - acm:DescribeCertificate
             Resource: "*"
 
-  # ALB Controller Launch Template
   ALBControllerLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -247,11 +248,18 @@ Resources:
             # Install AWS CLI & jq
             yum install -y aws-cli jq
 
-            # Download and apply AWS Load Balancer Controller IAM policy
-            curl -sL https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json > /tmp/iam_policy.json
-            aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy --policy-document file:///tmp/iam_policy.json || echo "Policy already exists"
+            # Wait for EKS NodeGroup to become active
+            echo "Waiting for EKS NodeGroup to be active..."
+            aws eks wait nodegroup-active --cluster-name ${DevEKS} --nodegroup-name EKSNodeGroup
 
-            # Install Kubernetes tools
+            # Configure kubectl
+            echo "Configuring kubectl..."
+            aws eks update-kubeconfig --region ${AWS::Region} --name ${DevEKS}
+
+            # Ensure kubectl works
+            kubectl get nodes
+
+            # Install Kubernetes tools if not already installed
             if ! command -v kubectl &> /dev/null
             then
               curl -o kubectl https://amazon-eks.s3.amazonaws.com/${AWS::Region}/latest/kubernetes_version/bin/linux/amd64/kubectl
@@ -260,12 +268,37 @@ Resources:
             fi
 
             # Install Helm
+            echo "Installing Helm..."
             curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 
-            # Deploy AWS Load Balancer Controller
-            kubectl apply -k github.com/aws/eks-charts/stable/aws-load-balancer-controller//crds?ref=master
+            # Create IAM OIDC Provider if not exists
+            echo "Checking for IAM OIDC Provider..."
+            eksctl utils associate-iam-oidc-provider --region ${AWS::Region} --cluster ${DevEKS} --approve
+
+            # Create ServiceAccount for AWS Load Balancer Controller
+            echo "Creating ServiceAccount for AWS Load Balancer Controller..."
+            kubectl create namespace kube-system || echo "Namespace already exists"
+            kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+
+            cat <<EOF | kubectl apply -f -
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: aws-load-balancer-controller
+              namespace: kube-system
+              annotations:
+                eks.amazonaws.com/role-arn: arn:aws:iam::${AWS::AccountId}:role/AWSLoadBalancerControllerRole
+            EOF
+
+            # Add EKS Helm repo
+            echo "Adding Helm repo..."
             helm repo add eks https://aws.github.io/eks-charts
+            helm repo update
+
+            # Deploy AWS Load Balancer Controller
+            echo "Installing AWS Load Balancer Controller..."
             helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+              --namespace kube-system \
               --set clusterName=${DevEKS} \
               --set serviceAccount.create=false \
               --set serviceAccount.name=aws-load-balancer-controller
