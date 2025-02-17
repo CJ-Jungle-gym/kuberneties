@@ -13,5 +13,5 @@ spec:
     app: olive-back
   ports:
     - protocol: TCP
-      port: 80
-      targetPort: 8080
+      port: 80 # 외부로 노출할 포트
+      targetPort: 8080  # 컨테이너 내부의 실제 포트

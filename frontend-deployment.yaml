@@ -1,0 +1,28 @@
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: olive-front
+#   labels:
+#     app: olive-front
+# spec:
+#   replicas: 2  # 프론트엔드 파드 복제본 수
+#   selector:
+#     matchLabels:
+#       app: olive-front
+#   template:
+#     metadata:
+#       labels:
+#         app: olive-front
+#     spec:
+#       containers:
+#         - name: olive-front
+#           image: 605134473022.dkr.ecr.ap-northeast-2.amazonaws.com/olive-front:latest  # ECR에서 가져올 이미지
+#           ports:
+#             - containerPort: 80
+#           resources:
+#             limits:
+#               memory: "512Mi"
+#               cpu: "500m"
+#             requests:
+#               memory: "256Mi"
+#               cpu: "250m"
