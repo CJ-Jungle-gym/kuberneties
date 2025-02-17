@@ -17,14 +17,11 @@ RDS_PRIVATE_SUBNET_B_CIDR="10.0.5.0/24"
 # --------------------------
 
 # EKS IAM 역할 생성
-EKS_ROLE_ARN=$(aws iam create-role --role-name EKSRole --assume-role-policy-document '{
+EKS_ROLE_ARN=$(aws iam get-role --role-name EKSRole --query "Role.Arn" --output text 2>/dev/null || \
+  aws iam create-role --role-name EKSRole --assume-role-policy-document '{
     "Version": "2012-10-17",
-    "Statement": [{
-        "Effect": "Allow",
-        "Principal": {"Service": "eks.amazonaws.com"},
-        "Action": "sts:AssumeRole"
-    }]
-}' --query "Role.Arn" --output text)
+    "Statement": [{"Effect": "Allow", "Principal": {"Service": "eks.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+  }' --query "Role.Arn" --output text)
 
 # EKS IAM 역할에 정책 추가
 aws iam attach-role-policy --role-name EKSRole --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
@@ -41,17 +38,29 @@ echo "✅ EKS IAM 역할 생성 및 정책 연결 완료: $EKS_ROLE_ARN"
 # --------------------------
 
 # VPC 생성
-VPC_ID=$(aws ec2 create-vpc --cidr-block $VPC_CIDR --region $AWS_REGION --query "Vpc.VpcId" --output text)
+VPC_ID=$(aws ec2 describe-vpcs --filters Name=cidr-block,Values=$VPC_CIDR --query "Vpcs[0].VpcId" --output text 2>/dev/null || \
+  aws ec2 create-vpc --cidr-block $VPC_CIDR --region $AWS_REGION --query "Vpc.VpcId" --output text)
+
 aws ec2 modify-vpc-attribute --vpc-id $VPC_ID --enable-dns-support "{\"Value\":true}"
 aws ec2 modify-vpc-attribute --vpc-id $VPC_ID --enable-dns-hostnames "{\"Value\":true}"
 echo "✅ VPC 생성 완료: $VPC_ID"
 
 # 서브넷 생성
-PUBLIC_SUBNET_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $PUBLIC_SUBNET_CIDR --availability-zone ${AWS_REGION}a --query "Subnet.SubnetId" --output text)
-EKS_PRIVATE_SUBNET_A_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $EKS_PRIVATE_SUBNET_A_CIDR --availability-zone ${AWS_REGION}a --query "Subnet.SubnetId" --output text)
-EKS_PRIVATE_SUBNET_B_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $EKS_PRIVATE_SUBNET_B_CIDR --availability-zone ${AWS_REGION}c --query "Subnet.SubnetId" --output text)
-RDS_PRIVATE_SUBNET_A_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $RDS_PRIVATE_SUBNET_A_CIDR --availability-zone ${AWS_REGION}a --query "Subnet.SubnetId" --output text)
-RDS_PRIVATE_SUBNET_B_ID=$(aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $RDS_PRIVATE_SUBNET_B_CIDR --availability-zone ${AWS_REGION}c --query "Subnet.SubnetId" --output text)
+PUBLIC_SUBNET_ID=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID Name=cidr-block,Values=$PUBLIC_SUBNET_CIDR --query "Subnets[0].SubnetId" --output text 2>/dev/null || \
+  aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $PUBLIC_SUBNET_CIDR --availability-zone ${AWS_REGION}a --query "Subnet.SubnetId" --output text)
+
+EKS_PRIVATE_SUBNET_A_ID=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID Name=cidr-block,Values=$EKS_PRIVATE_SUBNET_A_CIDR --query "Subnets[0].SubnetId" --output text 2>/dev/null || \
+  aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $EKS_PRIVATE_SUBNET_A_CIDR --availability-zone ${AWS_REGION}a --query "Subnet.SubnetId" --output text)
+
+EKS_PRIVATE_SUBNET_B_ID=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID Name=cidr-block,Values=$EKS_PRIVATE_SUBNET_B_CIDR --query "Subnets[0].SubnetId" --output text 2>/dev/null || \
+  aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $EKS_PRIVATE_SUBNET_B_CIDR --availability-zone ${AWS_REGION}c --query "Subnet.SubnetId" --output text)
+
+RDS_PRIVATE_SUBNET_A_ID=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID Name=cidr-block,Values=$RDS_PRIVATE_SUBNET_A_CIDR --query "Subnets[0].SubnetId" --output text 2>/dev/null || \
+  aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $RDS_PRIVATE_SUBNET_A_CIDR --availability-zone ${AWS_REGION}a --query "Subnet.SubnetId" --output text)
+
+RDS_PRIVATE_SUBNET_B_ID=$(aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC_ID Name=cidr-block,Values=$RDS_PRIVATE_SUBNET_B_CIDR --query "Subnets[0].SubnetId" --output text 2>/dev/null || \
+  aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $RDS_PRIVATE_SUBNET_B_CIDR --availability-zone ${AWS_REGION}c --query "Subnet.SubnetId" --output text)
+
 echo "✅ 서브넷 생성 완료"
 
 # --------------------------
@@ -59,13 +68,18 @@ echo "✅ 서브넷 생성 완료"
 # --------------------------
 
 # 인터넷 게이트웨이 생성 및 연결
-IGW_ID=$(aws ec2 create-internet-gateway --query "InternetGateway.InternetGatewayId" --output text)
+IGW_ID=$(aws ec2 describe-internet-gateways --filters Name=attachment.vpc-id,Values=$VPC_ID --query "InternetGateways[0].InternetGatewayId" --output text 2>/dev/null || \
+  aws ec2 create-internet-gateway --query "InternetGateway.InternetGatewayId" --output text)
 aws ec2 attach-internet-gateway --internet-gateway-id $IGW_ID --vpc-id $VPC_ID
 echo "✅ 인터넷 게이트웨이 생성 완료: $IGW_ID"
 
 # NAT 게이트웨이 생성
-EIP_ALLOC_ID=$(aws ec2 allocate-address --domain vpc --query "AllocationId" --output text)
-NAT_GW_ID=$(aws ec2 create-nat-gateway --subnet-id $PUBLIC_SUBNET_ID --allocation-id $EIP_ALLOC_ID --query "NatGateway.NatGatewayId" --output text)
+EIP_ALLOC_ID=$(aws ec2 describe-addresses --query "Addresses[?Domain=='vpc'].AllocationId" --output text 2>/dev/null || \
+  aws ec2 allocate-address --domain vpc --query "AllocationId" --output text)
+
+NAT_GW_ID=$(aws ec2 describe-nat-gateways --filter Name=vpc-id,Values=$VPC_ID --query "NatGateways[0].NatGatewayId" --output text 2>/dev/null || \
+  aws ec2 create-nat-gateway --subnet-id $PUBLIC_SUBNET_ID --allocation-id $EIP_ALLOC_ID --query "NatGateway.NatGatewayId" --output text)
+
 echo "✅ NAT 게이트웨이 생성 완료: $NAT_GW_ID"
 
 # 퍼블릭 라우트 테이블 생성
@@ -97,19 +111,6 @@ echo "✅ 프라이빗 서브넷 라우트 테이블 연결 완료"
 # EKS 클러스터 생성
 # --------------------------
 
-# EKS 클러스터 생성
-EKS_ROLE_ARN=$(aws iam create-role --role-name EKSRole --assume-role-policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{"Effect": "Allow", "Principal": {"Service": "eks.amazonaws.com"}, "Action": "sts:AssumeRole"}]
-}' --query "Role.Arn" --output text)
-
-aws iam attach-role-policy --role-name EKSRole --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
-aws iam attach-role-policy --role-name EKSRole --policy-arn arn:aws:iam::aws:policy/AmazonEKSServicePolicy
-
-EKS_CLUSTER_NAME="DevEKS"
-aws eks create-cluster --name $EKS_CLUSTER_NAME --role-arn $EKS_ROLE_ARN --resources-vpc-config subnetIds=$EKS_PRIVATE_SUBNET_A_ID,$EKS_PRIVATE_SUBNET_B_ID --region $AWS_REGION
-echo "✅ EKS 클러스터 생성 완료"
-
 # EKS 클러스터 보안 그룹 생성
 EKS_SECURITY_GROUP_ID=$(aws ec2 create-security-group --group-name EKSSecurityGroup --description "EKS Cluster Security Group" --vpc-id $VPC_ID --query "GroupId" --output text)
 
@@ -118,19 +119,30 @@ aws ec2 create-tags --resources $EKS_SECURITY_GROUP_ID --tags Key=Name,Value=EKS
 
 echo "✅ EKS 보안 그룹 생성 완료: $EKS_SECURITY_GROUP_ID"
 
+# EKS 클러스터 생성
+EKS_ROLE_ARN=$(aws eks describe-cluster --name $EKS_CLUSTER_NAME --query "cluster.roleArn" --output text 2>/dev/null || \
+  aws iam create-role --role-name EKSRole --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{"Effect": "Allow", "Principal": {"Service": "eks.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+  }' --query "Role.Arn" --output text)
+
+aws iam attach-role-policy --role-name EKSRole --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+aws iam attach-role-policy --role-name EKSRole --policy-arn arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+
+EKS_CLUSTER_NAME="DevEKS"
+aws eks create-cluster --name $EKS_CLUSTER_NAME --role-arn $EKS_ROLE_ARN --resources-vpc-config subnetIds=$EKS_PRIVATE_SUBNET_A_ID,$EKS_PRIVATE_SUBNET_B_ID --region $AWS_REGION
+echo "✅ EKS 클러스터 생성 완료"
+
 # --------------------------
-# ALB Controller launch template 생성성
+# ALB Controller launch template 생성
 # --------------------------
 
 # ALB Controller IAM 역할 생성
-ALB_ROLE_ARN=$(aws iam create-role --role-name ALBControllerRole --assume-role-policy-document '{
+ALB_ROLE_ARN=$(aws iam get-role --role-name ALBControllerRole --query "Role.Arn" --output text 2>/dev/null || \
+  aws iam create-role --role-name ALBControllerRole --assume-role-policy-document '{
     "Version": "2012-10-17",
-    "Statement": [{
-        "Effect": "Allow",
-        "Principal": {"Service": "eks.amazonaws.com"},
-        "Action": "sts:AssumeRole"
-    }]
-}' --query "Role.Arn" --output text)
+    "Statement": [{"Effect": "Allow", "Principal": {"Service": "eks.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+  }' --query "Role.Arn" --output text)
 
 aws iam attach-role-policy --role-name ALBControllerRole --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
 aws iam attach-role-policy --role-name ALBControllerRole --policy-arn arn:aws:iam::aws:policy/AmazonEKSServicePolicy
@@ -164,7 +176,8 @@ aws iam attach-role-policy --role-name ALBControllerRole --policy-arn $ALB_POLIC
 echo "✅ ALB Controller IAM 정책 생성 및 연결 완료: $ALB_POLICY_ARN"
 
 # ALB Controller Launch Template 생성
-LAUNCH_TEMPLATE_ID=$(aws ec2 create-launch-template --launch-template-name ALBControllerTemplate --launch-template-data '{
+LAUNCH_TEMPLATE_ID=$(aws ec2 describe-launch-templates --filters Name=launch-template-name,Values=ALBControllerTemplate --query "LaunchTemplates[0].LaunchTemplateId" --output text 2>/dev/null || \
+  aws ec2 create-launch-template --launch-template-name ALBControllerTemplate --launch-template-data '{
     "UserData": "'$(echo -n '#!/bin/bash
 set -o xtrace
 
@@ -215,10 +228,6 @@ echo "✅ ALB Controller를 포함한 EKS Node Group 생성 완료"
 # --------------------------
 
 # RDS 서브넷 그룹 생성
-aws rds create-db-subnet-group --db-subnet-group-name dev-rds-subnet-group --db-subnet-group-description "RDS subnet group" --subnet-ids $RDS_PRIVATE_SUBNET_A_ID $RDS_PRIVATE_SUBNET_B_ID
-echo "✅ RDS 서브넷 그룹 생성 완료"
-
-# RDS 서브넷 그룹 생성
 aws rds create-db-subnet-group --db-subnet-group-name dev-rds-subnet-group \
   --db-subnet-group-description "RDS subnet group for Multi-AZ" \
   --subnet-ids $RDS_PRIVATE_SUBNET_A_ID $RDS_PRIVATE_SUBNET_B_ID \
@@ -254,7 +263,6 @@ echo "✅ RDS Multi-AZ 인스턴스 생성 완료"
 LOG_GROUP_NAME="/aws/eks/$EKS_CLUSTER_NAME/cluster"
 aws logs create-log-group --log-group-name $LOG_GROUP_NAME --region $AWS_REGION || echo "로그 그룹 이미 존재함"
 echo "✅ CloudWatch 로그 그룹 생성 완료: $LOG_GROUP_NAME"
-
 
 # CloudWatch Logs 정책 생성
 CLOUDWATCH_POLICY_ARN=$(aws iam create-policy --policy-name EKSCloudWatchLogsPolicy --policy-document '{
