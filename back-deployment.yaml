@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: olive-back
-          image: sha256:68cd66025f0f74c083021f9ca0d19d6845d5e979ce74b622f927facf31d41e12  # ✅ ECR 이미지 사용
+          image: 605134473022.dkr.ecr.ap-northeast-2.amazonaws.com/olive-back:latest
           ports:
             - containerPort: 8080
           resources:
