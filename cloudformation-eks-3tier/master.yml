@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09' 
+Description: "EKS 기반 3-Tier 아키텍처 마스터 스택"
+
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.ap-northeast-2.amazonaws.com/my-cloudformation-bucket-605134473022/vpc.yml
+
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.ap-northeast-2.amazonaws.com/my-cloudformation-bucket-605134473022/iam.yml
+
+  SecurityStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: VPCStack
+    Properties:
+      TemplateURL: https://s3.ap-northeast-2.amazonaws.com/my-cloudformation-bucket-605134473022/security.yml
+
+  EKSStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - VPCStack
+      - IAMStack
+      - SecurityStack
+    Properties:
+      TemplateURL: https://s3.ap-northeast-2.amazonaws.com/my-cloudformation-bucket-605134473022/eks-cluster.yml
+
+  ALBStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - VPCStack
+      - SecurityStack
+    Properties:
+      TemplateURL: https://s3.ap-northeast-2.amazonaws.com/my-cloudformation-bucket-605134473022/alb.yml
+
+  RDSStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - VPCStack
+      - SecurityStack
+    Properties:
+      TemplateURL: https://s3.ap-northeast-2.amazonaws.com/my-cloudformation-bucket-605134473022/rds.yml
+
+  MonitoringStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: EKSStack
+    Properties:
+      TemplateURL: https://s3.ap-northeast-2.amazonaws.com/my-cloudformation-bucket-605134473022/cloudwatch.yml
+
+Outputs:
+  EKSClusterName:
+    Value: !GetAtt EKSStack.Outputs.EKSClusterName
+  RDSInstance:
+    Value: !GetAtt RDSStack.Outputs.RDSInstance
+  VPCId:
+    Value: !GetAtt VPCStack.Outputs.VPCId

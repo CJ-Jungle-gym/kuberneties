@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "RDS (MySQL) 생성"
+
+Resources:
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: "dev-rds-subnet-group"
+      SubnetIds:
+        - !ImportValue PrivateSubnetAId
+        - !ImportValue PrivateSubnetBId
+
+  DevRDS:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: dev-rds
+      Engine: mysql
+      DBInstanceClass: db.t3.micro
+      MultiAZ: true
+      MasterUsername: admin
+      MasterUserPassword: "SecurePassword123!"
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+
+Outputs:
+  RDSInstance:
+    Value: !Ref DevRDS

@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "EKS 클러스터 및 노드 그룹 설정"
+
+Resources:
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: DevEKS
+      RoleArn: !ImportValue EKSRoleArn
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !ImportValue PrivateSubnetAId
+          - !ImportValue PrivateSubnetBId
+
+Outputs:
+  EKSClusterName:
+    Value: !Ref EKSCluster

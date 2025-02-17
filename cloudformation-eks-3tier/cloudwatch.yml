@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "CloudWatch 로그 및 모니터링 설정"
+
+Resources:
+  CloudWatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /eks-monitoring
+      RetentionInDays: 30
+
+  CloudWatchAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: eks-high-cpu
+      MetricName: CPUUtilization
+      Namespace: AWS/EKS
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+
+Outputs:
+  CloudWatchLogGroup:
+    Value: !Ref CloudWatchLogGroup

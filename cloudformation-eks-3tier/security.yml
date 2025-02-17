@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "EKS 및 RDS 보안 그룹 설정"
+
+Resources:
+  EKSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "EKS 클러스터 보안 그룹"
+      VpcId: 
+        Fn::ImportValue: "VPCId"  # <-- ImportValue도 VPCId로 맞춤
+      Tags:
+        - Key: Name
+          Value: EKSSecurityGroup
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "RDS MySQL 접근 허용"
+      VpcId: 
+        Fn::ImportValue: "VPCId"  # <-- 동일하게 수정
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EKSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: RDSSecurityGroup
+
+Outputs:
+  EKSSecurityGroup:
+    Value: !Ref EKSSecurityGroup
+    Export:
+      Name: "EKSSecurityGroup"
+
+  RDSSecurityGroup:
+    Value: !Ref RDSSecurityGroup
+    Export:
+      Name: "RDSSecurityGroup"

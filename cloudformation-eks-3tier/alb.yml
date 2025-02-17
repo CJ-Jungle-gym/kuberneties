@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "ALB 및 Ingress Controller"
+
+Resources:
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: ALB
+      Scheme: internet-facing
+      Subnets: 
+        - Fn::ImportValue: !Sub "${VPCStack}-PublicSubnetIds"
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+Outputs:
+  ALBName:
+    Value: !Ref ALB
