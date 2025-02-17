@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backend-app
+  namespace: argocd
+spec:
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  source:
+    repoURL: 'https://github.com/CJ-Jungle-gym/kuberneties.git'
+    targetRevision: HEAD
+    # path: backend # 해당 Git 저장소 내에서 배포 파일이 위치하는 경로로 수정
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
