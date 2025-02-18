@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: olive-back
-          image: 605134473022.dkr.ecr.ap-northeast-2.amazonaws.com/olive-back:latest
+          image: 605134473022.dkr.ecr.ap-northeast-2.amazonaws.com/olive-back:v2
           ports:
             - containerPort: 8080
           resources:
