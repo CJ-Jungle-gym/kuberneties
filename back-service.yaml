@@ -3,8 +3,8 @@ kind: Service
 metadata:
   name: olive-back-service
   annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: "external"
-    service.beta.kubernetes.io/aws-load-balancer-subnets: "auto"
+    service.beta.kubernetes.io/aws-load-balancer-type: "alb"
+    service.beta.kubernetes.io/aws-load-balancer-subnets: "subnet-0e8bb2dc3046deb58, subnet-08e8fd1ad127215c5" 
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
     service.beta.kubernetes.io/aws-load-balancer-target-type: "ip" 
 spec:
