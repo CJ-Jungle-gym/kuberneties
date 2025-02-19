@@ -368,14 +368,10 @@ Resources:
       InstanceTypes:
         - t3.medium
       DiskSize: 20 
-      SecurityGroups:
-      - !Ref EksBackendSecurityGroup
       Tags:
         Name: "EKSNodeGroup"
     DependsOn:
       - DEVEKS  
-      - EksBackendSecurityGroup
-
   
   # RDS Subnet Group
   RDSSubnetGroup:
