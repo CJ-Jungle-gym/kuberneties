@@ -366,10 +366,6 @@ Resources:
       InstanceTypes:
         - t3.medium
       DiskSize: 20 
-      ssh:
-        allow: true
-        publicKeyPath: ~/.ssh/id_rsa.pub
-        sourceSecurityGroupIds: !Ref EksBackendSecurityGroup
       Tags:
         Name: "EKSNodeGroup"
     DependsOn:
@@ -441,38 +437,29 @@ Resources:
   #             app.kubernetes.io/name: alb-ingress-controller
   #           name: alb-ingress-controller
   #           namespace: kube-system 
-
-   # EKS OIDC Provider
-  EksOIDCProvider:
-    Type: AWS::IAM::OIDCProvider
-    Properties:
-      Url: !GetAtt DEVEKS.Identity.Oidc.Issuer
-      ClientIdList:
-        - sts.amazonaws.com
-      ThumbprintList: []
   
-  #ALBINgressControllerRole
-  ALBIngressIAMRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: ALBIngressControllerRole
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Federated: !Ref EksOIDCProvider  
-            Action: sts:AssumeRoleWithWebIdentity
-            Condition:
-              StringEquals:
-                Fn::Sub: 
-                  - "${OidcUrl}:sub"
-                  - OidcUrl: !GetAtt DEVEKS.Identity.Oidc.Issuer
-      ManagedPolicyArns:
-        - arn:aws:iam::605134473022:policy/POLICY-EKS-IAM  
-      Tags:
-        - Key: Name
-          Value: ALBIngressControllerRole
+  # #ALBINgressControllerRole
+  # ALBIngressIAMRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: ALBIngressControllerRole
+  #     AssumeRolePolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Federated: !Ref EksOIDCProvider  
+  #           Action: sts:AssumeRoleWithWebIdentity
+  #           Condition:
+  #             StringEquals:
+  #               Fn::Sub: 
+  #                 - "${OidcUrl}:sub"
+  #                 - OidcUrl: !GetAtt DEVEKS.Identity.Oidc.Issuer
+  #     ManagedPolicyArns:
+  #       - arn:aws:iam::605134473022:policy/POLICY-EKS-IAM  
+  #     Tags:
+  #       - Key: Name
+  #         Value: ALBIngressControllerRole
   
   # #ALB IngressService Accout
   # ALBIngressServiceAccount:
