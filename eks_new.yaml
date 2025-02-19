@@ -1,0 +1,554 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EKS with ALB 
+
+Resources:
+  # VPC
+  DEVVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: DEVVPC
+
+  # Public Subnet
+  PublicSubnetAA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DEVVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: ap-northeast-2a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnetAA
+  PublicSubnetBB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DEVVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: ap-northeast-2a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnetBB
+
+  # EKS Private Subnets
+  EKSPrivateSubnetAA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DEVVPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: ap-northeast-2a
+      Tags:
+        - Key: Name
+          Value: EKSPrivateSubnetAA
+
+  EKSPrivateSubnetBB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DEVVPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: ap-northeast-2c
+      Tags:
+        - Key: Name
+          Value: EKSPrivateSubnetBB
+
+  # RDS Private Subnets
+  RDSPrivateSubnetAA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DEVVPC
+      CidrBlock: 10.0.5.0/24
+      AvailabilityZone: ap-northeast-2a
+      Tags:
+        - Key: Name
+          Value: RDSPrivateSubnetAA
+
+  RDSPrivateSubnetBB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DEVVPC
+      CidrBlock: 10.0.6.0/24
+      AvailabilityZone: ap-northeast-2c
+      Tags:
+        - Key: Name
+          Value: RDSPrivateSubnetBB
+
+  # Internet Gateway
+  DEVIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: DEVIGW
+
+  AttachIGW:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref DEVVPC
+      InternetGatewayId: !Ref DEVIGW
+
+  # NAT Gateway
+  NatEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId  
+      SubnetId: !Ref PublicSubnetAA
+      Tags:
+        - Key: Name
+          Value: DEVNGW
+
+  # Route Tables
+  ## public route
+  PublicRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DEVVPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref DEVIGW
+
+  AssociatePublicSubnetA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetAA
+      RouteTableId: !Ref PublicRouteTable1
+
+  AssociatePublicSubnetB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetBB
+      RouteTableId: !Ref PublicRouteTable1
+
+  ## Private route
+  PrivateRouteTableAA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DEVVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTableAA
+
+  PrivateRouteAA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableAA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateRouteTableBB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DEVVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTableBB
+
+  PrivateRouteBB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableBB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  AssociatePrivateSubnetA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EKSPrivateSubnetAA
+      RouteTableId: !Ref PrivateRouteTableAA
+
+  AssociatePrivateSubnetB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EKSPrivateSubnetBB
+      RouteTableId: !Ref PrivateRouteTableBB
+
+  ## RDS route
+  RDSPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DEVVPC
+      Tags:
+        - Key: Name
+          Value: RDSPrivateRouteTable
+
+  RDSAssociatePrivateSubnetA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref RDSPrivateSubnetAA
+      RouteTableId: !Ref RDSPrivateRouteTable
+
+  RDSAssociatePrivateSubnetB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref RDSPrivateSubnetBB
+      RouteTableId: !Ref RDSPrivateRouteTable
+
+  # Security Group
+  ## 1. Bastion security group
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow SSH access to Bastion and HTTP/HTTPS to ALB"
+      VpcId: !Ref DEVVPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0  # bastion ssh allow
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: BastionSecurityGroup
+
+  ## 2. ALB Security group
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow HTTP/HTTPS access from Bastion and forward to EKS"
+      VpcId: !Ref DEVVPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref BastionSecurityGroup  # bastion allow
+        - IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0  # backend fowrding allow
+      Tags:
+        - Key: Name
+          Value: ALBSecurityGroup
+
+  ## 3. EKS Backend Security group
+  EksBackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow traffic only from ALB and access to RDS"
+      VpcId: !Ref DEVVPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup  # ALB allow
+        - IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0 
+      Tags:
+        - Key: Name
+          Value: EksBackendSecurityGroup
+
+  ## 4. RDS Security allow
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow MySQL traffic only from EKS backend"
+      VpcId: !Ref DEVVPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EksBackendSecurityGroup  # EKS backend allow
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: RdsSecurityGroup
+
+  #EKS IAM ROLE
+  EKSControlPlaneRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EKSControlPlaneRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Tags:
+        - Key: Name
+          Value: EKSControlPlaneRole
+  
+  EKSWorkerNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EKSWorkerNodeRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Tags:
+        - Key: Name
+          Value: EKSWorkerNodeRole
+
+  #EKS 
+  DEVEKS:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: DEVEKS
+      RoleArn: !GetAtt EKSControlPlaneRole.Arn
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+            - Type: authenticator
+            - Type: controllerManager
+            - Type: scheduler
+      KubernetesNetworkConfig:
+        IpFamily: ipv4
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !Ref EKSPrivateSubnetAA
+          - !Ref EKSPrivateSubnetBB
+        SecurityGroupIds:
+          - !Ref ALBSecurityGroup
+        EndpointPublicAccess: false  
+        EndpointPrivateAccess: true  
+      Tags:
+        - Key: Name
+          Value: DEVEKS
+  
+  # EKS node group
+  EKSNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref DEVEKS
+      NodegroupName: EKSNodeGroup
+      NodeRole: !GetAtt EKSWorkerNodeRole.Arn
+      ScalingConfig:
+        MinSize: 2
+        MaxSize: 3
+        DesiredSize: 2
+      Subnets:
+        - !Ref EKSPrivateSubnetAA
+        - !Ref EKSPrivateSubnetBB
+      InstanceTypes:
+        - t3.medium
+      DiskSize: 20 
+      ssh:
+        allow: true
+        publicKeyPath: ~/.ssh/id_rsa.pub
+        sourceSecurityGroupIds: !Ref EksBackendSecurityGroup
+      Tags:
+        Name: "EKSNodeGroup"
+    DependsOn:
+      - DEVEKS  
+      - EksBackendSecurityGroup
+
+  # # ALB Ingress Controller RBAC 
+  # ALBIngressControllerRBAC:
+  #   Type: AWS::EKS::Manifest
+  #   Properties:
+  #     ClusterName: !Ref DEVEKS
+  #     Manifest:
+  #       - apiVersion: rbac.authorization.k8s.io/v1
+  #         kind: ClusterRole
+  #         metadata:
+  #           labels:
+  #             app.kubernetes.io/name: alb-ingress-controller
+  #           name: alb-ingress-controller
+  #         rules:
+  #           - apiGroups:
+  #               - ""
+  #               - extensions
+  #             resources:
+  #               - configmaps
+  #               - endpoints
+  #               - events
+  #               - ingresses
+  #               - ingresses/status
+  #               - services
+  #               - pods/status
+  #             verbs:
+  #               - create
+  #               - get
+  #               - list
+  #               - update
+  #               - watch
+  #               - patch
+  #           - apiGroups:
+  #               - ""
+  #               - extensions
+  #             resources:
+  #               - nodes
+  #               - pods
+  #               - secrets
+  #               - services
+  #               - namespaces
+  #             verbs:
+  #               - get
+  #               - list
+  #               - watch
+  #       - apiVersion: rbac.authorization.k8s.io/v1
+  #         kind: ClusterRoleBinding
+  #         metadata:
+  #           labels:
+  #             app.kubernetes.io/name: alb-ingress-controller
+  #           name: alb-ingress-controller
+  #         roleRef:
+  #           apiGroup: rbac.authorization.k8s.io
+  #           kind: ClusterRole
+  #           name: alb-ingress-controller
+  #         subjects:
+  #           - kind: ServiceAccount
+  #             name: alb-ingress-controller
+  #             namespace: kube-system
+  #       - apiVersion: v1
+  #         kind: ServiceAccount
+  #         metadata:
+  #           labels:
+  #             app.kubernetes.io/name: alb-ingress-controller
+  #           name: alb-ingress-controller
+  #           namespace: kube-system 
+
+   # EKS OIDC Provider
+  EksOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: !GetAtt DEVEKS.Identity.Oidc.Issuer
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList: []
+  
+  #ALBINgressControllerRole
+  ALBIngressIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ALBIngressControllerRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref EksOIDCProvider  
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                Fn::Sub: 
+                  - "${OidcUrl}:sub"
+                  - OidcUrl: !GetAtt DEVEKS.Identity.Oidc.Issuer
+      ManagedPolicyArns:
+        - arn:aws:iam::605134473022:policy/POLICY-EKS-IAM  
+      Tags:
+        - Key: Name
+          Value: ALBIngressControllerRole
+  
+  # #ALB IngressService Accout
+  # ALBIngressServiceAccount:
+  #   Type: AWS::EKS::ServiceAccount
+  #   Properties:
+  #     ClusterName: !Ref DEVEKS
+  #     Name: alb-ingress-controller
+  #     Namespace: kube-system
+  #     RoleArn: !GetAtt ALBIngressIAMRole.Arn  
+  #     Tags:
+  #       - Key: Name
+  #         Value: alb-ingress-controller
+  
+  # #ALB Ingress Controller Deployment
+  # ALBIngressControllerDeployment:
+  #   Type: AWS::EKS::Manifest
+  #   Properties:
+  #     ClusterName: !Ref DEVEKS
+  #     Manifest:
+  #       - apiVersion: apps/v1
+  #         kind: Deployment
+  #         metadata:
+  #           labels:
+  #             app.kubernetes.io/name: alb-ingress-controller
+  #           name: alb-ingress-controller
+  #           namespace: kube-system
+  #         spec:
+  #           selector:
+  #             matchLabels:
+  #               app.kubernetes.io/name: alb-ingress-controller
+  #           template:
+  #             metadata:
+  #               labels:
+  #                 app.kubernetes.io/name: alb-ingress-controller
+  #             spec:
+  #               serviceAccountName: alb-ingress-controller 
+  #               containers:
+  #                 - name: alb-ingress-controller
+  #                   image: docker.io/amazon/aws-alb-ingress-controller:v1.1.8
+  #                   args:
+  #                     - --ingress-class=alb
+  #                     - --cluster-name=DEVEKS  
+  #                     - !Sub "--aws-vpc-id=${DEVVPC}"  
+  #                     - --aws-region=ap-northeast-2  
+  
+  # RDS Subnet Group
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: dev-rds-subnet-group
+      DBSubnetGroupDescription: "RDS subnet group for Multi-AZ"
+      SubnetIds:
+        - !Ref RDSPrivateSubnetAA
+        - !Ref RDSPrivateSubnetBB
+      Tags:
+        - Key: Name
+          Value: RDSSubnetGroup
+
+  # RDS Instance (Multi-AZ)
+  DevRDS:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: dev-rds
+      Engine: mysql
+      EngineVersion: "8.0"
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      MultiAZ: true
+      MasterUsername: admin
+      MasterUserPassword: "SecurePassword123!"
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RdsSecurityGroup
+      Tags:
+        - Key: Name
+          Value: DevRDS
+    DeletionPolicy: Delete
+    DependsOn:
+      - RdsSecurityGroup

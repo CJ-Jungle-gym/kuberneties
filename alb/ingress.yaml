@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1  # 변경된 API 버전
+kind: Ingress
+metadata:
+  name: my-ingress
+  namespace: default
+spec:
+  rules:
+    - host: myapp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-service
+                port:
+                  number: 80
