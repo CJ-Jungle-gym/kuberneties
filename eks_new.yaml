@@ -292,6 +292,7 @@ Resources:
             Principal:
               Service:
                 - eks.amazonaws.com
+                - ec2.amazonaws.com
             Action:
               - sts:AssumeRole
       ManagedPolicyArns:
@@ -367,6 +368,8 @@ Resources:
       InstanceTypes:
         - t3.medium
       DiskSize: 20 
+      SecurityGroups:
+      - !Ref EksBackendSecurityGroup
       Tags:
         Name: "EKSNodeGroup"
     DependsOn:
