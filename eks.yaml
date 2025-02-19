@@ -23,7 +23,7 @@ Resources:
           Value: DevVPC
 
   # Public Subnet (NAT Gateway)
-  PublicSubnet:
+  PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DevVPC
@@ -32,14 +32,24 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: PublicSubnet
+          Value: PublicSubnetA
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DevVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: ap-northeast-2a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnetB
 
   # EKS Private Subnets
   EKSPrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DevVPC
-      CidrBlock: 10.0.2.0/24
+      CidrBlock: 10.0.3.0/24
       AvailabilityZone: ap-northeast-2a
       Tags:
         - Key: Name
@@ -49,7 +59,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DevVPC
-      CidrBlock: 10.0.3.0/24
+      CidrBlock: 10.0.4.0/24
       AvailabilityZone: ap-northeast-2c
       Tags:
         - Key: Name
@@ -60,7 +70,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DevVPC
-      CidrBlock: 10.0.4.0/24
+      CidrBlock: 10.0.5.0/24
       AvailabilityZone: ap-northeast-2a
       Tags:
         - Key: Name
@@ -70,7 +80,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DevVPC
-      CidrBlock: 10.0.5.0/24
+      CidrBlock: 10.0.6.0/24
       AvailabilityZone: ap-northeast-2c
       Tags:
         - Key: Name
@@ -121,10 +131,16 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref DevIGW
 
-  AssociatePublicSubnet:
+  AssociatePublicSubnetA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PublicSubnet
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  AssociatePublicSubnetB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
       RouteTableId: !Ref PublicRouteTable
 
   PrivateRouteTable:
@@ -372,6 +388,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
         - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::605134473022:policy/AWSLoadBalancerControllerIAMPolicy
       Tags:
        - Key: Name
          Value: EKSNodeRole
