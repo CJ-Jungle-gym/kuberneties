@@ -311,6 +311,7 @@ Resources:
             Principal:
               Service:
                 - eks.amazonaws.com
+                - ec2.amazonaws.com
             Action:
               - sts:AssumeRole
       ManagedPolicyArns:
@@ -372,37 +373,6 @@ Resources:
       - DEVEKS  
       - EksBackendSecurityGroup
 
-  # # EKS OIDC Provider
-  # EksOIDCProvider:
-  #   Type: AWS::IAM::OIDCProvider
-  #   Properties:
-  #     Url: !GetAtt DEVEKS.Identity.Oidc.Issuer
-  #     ClientIdList:
-  #       - sts.amazonaws.com
-  #     ThumbprintList: []
-  
-  # #ALBINgressControllerRole
-  # ALBIngressIAMRole:
-  #   Type: AWS::IAM::Role
-  #   Properties:
-  #     RoleName: ALBIngressControllerRole
-  #     AssumeRolePolicyDocument:
-  #       Version: "2012-10-17"
-  #       Statement:
-  #         - Effect: Allow
-  #           Principal:
-  #             Federated: !Ref EksOIDCProvider  
-  #           Action: sts:AssumeRoleWithWebIdentity
-  #           Condition:
-  #             StringEquals:
-  #               Fn::Sub: 
-  #                 - "${OidcUrl}:sub"
-  #                 - OidcUrl: !GetAtt DEVEKS.Identity.Oidc.Issuer
-  #     ManagedPolicyArns:
-  #       - arn:aws:iam::605134473022:policy/POLICY-EKS-IAM  
-  #     Tags:
-  #       - Key: Name
-  #         Value: ALBIngressControllerRole
   
   # RDS Subnet Group
   RDSSubnetGroup:
