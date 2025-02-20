@@ -35,8 +35,7 @@ aws eks --region ap-northeast-2 update-kubeconfig --name DEVEKS
 kubectl create namespace argocd
 
 #### 3. ArgoCD 설치  
-kubectl apply -n argocd -f \
-  https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 #### 4. ArgoCD 서버 서비스 노출  
 kubectl patch svc argocd-server -n argocd -p "{\"spec\": {\"type\": \"LoadBalancer\"}}"
