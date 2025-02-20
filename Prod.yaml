@@ -3,93 +3,93 @@ Description: EKS with ALB
 
 Resources:
   # VPC
-  DEVVPC:
+  ProdVpc:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16
+      CidrBlock: 10.2.0.0/24
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: DEVVPC
+          Value: Prod-Vpc
 
   # Public Subnet
-  PublicSubnetAA:
+  ProdVpcPublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref DEVVPC
-      CidrBlock: 10.0.1.0/24
+      VpcId: !Ref ProdVpc
+      CidrBlock: 10.2.0.0/26
       AvailabilityZone: ap-northeast-2a
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: PublicSubnetAA
-  PublicSubnetBB:
+          Value: Prod-Vpc-Public-SubnetA
+  ProdVpcPublicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref DEVVPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: ap-northeast-2c
+      VpcId: !Ref ProdVpc
+      CidrBlock: 10.2.0.64/26
+      AvailabilityZone: ap-northeast-2b
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: PublicSubnetBB
+          Value: Prod-Vpc-Public-SubnetB
 
   # EKS Private Subnets
-  EKSPrivateSubnetAA:
+  ProdVpcPrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref DEVVPC
-      CidrBlock: 10.0.3.0/24
+      VpcId: !Ref ProdVpc
+      CidrBlock: 10.2.0.128/27
       AvailabilityZone: ap-northeast-2a
       Tags:
         - Key: Name
-          Value: EKSPrivateSubnetAA
+          Value: Prod-Vpc-Private-SubnetA
 
-  EKSPrivateSubnetBB:
+  ProdVpcPrivateSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref DEVVPC
-      CidrBlock: 10.0.4.0/24
-      AvailabilityZone: ap-northeast-2c
+      VpcId: !Ref ProdVpc
+      CidrBlock: 10.2.0.160/27
+      AvailabilityZone: ap-northeast-2b
       Tags:
         - Key: Name
-          Value: EKSPrivateSubnetBB
+          Value: Prod-Vpc-Private-SubnetB
 
   # RDS Private Subnets
-  RDSPrivateSubnetAA:
+  ProdVpcPrivateDBSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref DEVVPC
-      CidrBlock: 10.0.5.0/24
+      VpcId: !Ref ProdVpc
+      CidrBlock: 10.2.0.192/27
       AvailabilityZone: ap-northeast-2a
       Tags:
         - Key: Name
-          Value: RDSPrivateSubnetAA
+          Value: ProdVpc-Private-DB-Subnet-A
 
-  RDSPrivateSubnetBB:
+  ProdVpcPrivateDBSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref DEVVPC
-      CidrBlock: 10.0.6.0/24
-      AvailabilityZone: ap-northeast-2c
+      VpcId: !Ref ProdVpc
+      CidrBlock: 10.2.0.224/27
+      AvailabilityZone: ap-northeast-2b
       Tags:
         - Key: Name
-          Value: RDSPrivateSubnetBB
+          Value: ProdVpc-Private-DB-Subnet-B
 
   # Internet Gateway
-  DEVIGW:
+  ProdIgw:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: DEVIGW
+          Value: Prod-Igw
 
   AttachIGW:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref DEVVPC
-      InternetGatewayId: !Ref DEVIGW
+      VpcId: !Ref ProdVpc
+      InternetGatewayId: !Ref ProdIgw
 
   # NAT Gateway
   NatEIP:
@@ -97,115 +97,115 @@ Resources:
     Properties:
       Domain: vpc
 
-  NatGateway:
+  ProdNgw:
     Type: AWS::EC2::NatGateway
     Properties:
       AllocationId: !GetAtt NatEIP.AllocationId  
-      SubnetId: !Ref PublicSubnetAA
+      SubnetId: !Ref  ProdVpcPublicSubnetA
       Tags:
         - Key: Name
-          Value: DEVNGW
+          Value: Prod-Ngw
 
   # Route Tables
   ## public route
-  PublicRouteTable1:
+  PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref DEVVPC
+      VpcId: !Ref ProdVpc
       Tags:
         - Key: Name
-          Value: PublicRouteTable
+          Value: Public-Route-Table
 
   PublicRoute:
     Type: AWS::EC2::Route
     Properties:
-      RouteTableId: !Ref PublicRouteTable1
+      RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref DEVIGW
+      GatewayId: !Ref ProdIgw
 
   AssociatePublicSubnetA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PublicSubnetAA
-      RouteTableId: !Ref PublicRouteTable1
+      SubnetId: !Ref  ProdVpcPublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
 
   AssociatePublicSubnetB:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PublicSubnetBB
-      RouteTableId: !Ref PublicRouteTable1
+      SubnetId: !Ref ProdVpcPublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
 
   ## Private route
-  PrivateRouteTableAA:
+  ProdPrivateRouteTableA:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref DEVVPC
+      VpcId: !Ref ProdVpc
       Tags:
         - Key: Name
-          Value: PrivateRouteTableAA
+          Value: Prod-Private-Route-Table-A
 
-  PrivateRouteAA:
+  PrivateRouteA:
     Type: AWS::EC2::Route
     Properties:
-      RouteTableId: !Ref PrivateRouteTableAA
+      RouteTableId: !Ref ProdPrivateRouteTableA
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
+      NatGatewayId: !Ref ProdNgw
 
-  PrivateRouteTableBB:
+  ProdPrivateRouteTableB:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref DEVVPC
+      VpcId: !Ref ProdVpc
       Tags:
         - Key: Name
-          Value: PrivateRouteTableBB
+          Value: Prod-Private-Route-Table-B
 
-  PrivateRouteBB:
+  PrivateRouteB:
     Type: AWS::EC2::Route
     Properties:
-      RouteTableId: !Ref PrivateRouteTableBB
+      RouteTableId: !Ref ProdPrivateRouteTableB
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
+      NatGatewayId: !Ref ProdNgw
 
   AssociatePrivateSubnetA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref EKSPrivateSubnetAA
-      RouteTableId: !Ref PrivateRouteTableAA
+      SubnetId: !Ref ProdVpcPrivateSubnetA
+      RouteTableId: !Ref ProdPrivateRouteTableA
 
   AssociatePrivateSubnetB:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref EKSPrivateSubnetBB
-      RouteTableId: !Ref PrivateRouteTableBB
+      SubnetId: !Ref ProdVpcPrivateSubnetB
+      RouteTableId: !Ref ProdPrivateRouteTableB
 
   ## RDS route
-  RDSPrivateRouteTable:
+  ProdPrivateDBRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref DEVVPC
+      VpcId: !Ref ProdVpc
       Tags:
         - Key: Name
-          Value: RDSPrivateRouteTable
+          Value: Prod-Private-DB-Route-Table
 
   RDSAssociatePrivateSubnetA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref RDSPrivateSubnetAA
-      RouteTableId: !Ref RDSPrivateRouteTable
+      SubnetId: !Ref ProdVpcPrivateDBSubnetA
+      RouteTableId: !Ref ProdPrivateDBRouteTable
 
   RDSAssociatePrivateSubnetB:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref RDSPrivateSubnetBB
-      RouteTableId: !Ref RDSPrivateRouteTable
+      SubnetId: !Ref ProdVpcPrivateDBSubnetB
+      RouteTableId: !Ref ProdPrivateDBRouteTable
 
   # Security Group
   ## 1. Bastion security group
-  BastionSecurityGroup:
+  ProdBastionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: "Allow SSH access to Bastion and HTTP/HTTPS to ALB"
-      VpcId: !Ref DEVVPC
+      VpcId: !Ref ProdVpc
       SecurityGroupIngress:
         - IpProtocol: "tcp"
           FromPort: 22
@@ -216,119 +216,76 @@ Resources:
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: BastionSecurityGroup
+          Value: Prod-Bastion-Security-Group
 
   ## 2. ALB Security group
-  ALBSecurityGroup:
+  ProdALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: "Allow HTTP/HTTPS access from Bastion and forward to EKS"
-      VpcId: !Ref DEVVPC
+      VpcId: !Ref ProdVpc
       SecurityGroupIngress:
         - IpProtocol: "tcp"
           FromPort: 80
           ToPort: 80
-          SourceSecurityGroupId: !Ref BastionSecurityGroup  # bastion allow
+          SourceSecurityGroupId: !Ref ProdBastionSecurityGroup  # bastion allow
         - IpProtocol: "tcp"
           FromPort: 443
           ToPort: 443
-          SourceSecurityGroupId: !Ref BastionSecurityGroup
+          SourceSecurityGroupId: !Ref ProdBastionSecurityGroup
       SecurityGroupEgress:
         - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0  # backend fowrding allow
       Tags:
         - Key: Name
-          Value: ALBSecurityGroup
+          Value: Prod-ALB-Security-Group
 
   ## 3. EKS Backend Security group
-  EksBackendSecurityGroup:
+  ProdBackendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: "Allow traffic only from ALB and access to RDS"
-      VpcId: !Ref DEVVPC
+      VpcId: !Ref ProdVpc
       SecurityGroupIngress:
         - IpProtocol: "tcp"
           FromPort: 80
           ToPort: 80
-          SourceSecurityGroupId: !Ref ALBSecurityGroup  # ALB allow
+          SourceSecurityGroupId: !Ref ProdALBSecurityGroup  # ALB allow
         - IpProtocol: "tcp"
           FromPort: 443
           ToPort: 443
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          SourceSecurityGroupId: !Ref ProdALBSecurityGroup
       SecurityGroupEgress:
         - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0 
       Tags:
         - Key: Name
-          Value: EksBackendSecurityGroup
+          Value: Prod-Backend-Security-Group
 
   ## 4. RDS Security allow
-  RdsSecurityGroup:
+  ProdDBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: "Allow MySQL traffic only from EKS backend"
-      VpcId: !Ref DEVVPC
+      VpcId: !Ref ProdVpc
       SecurityGroupIngress:
         - IpProtocol: "tcp"
           FromPort: 3306
           ToPort: 3306
-          SourceSecurityGroupId: !Ref EksBackendSecurityGroup  # EKS backend allow
+          SourceSecurityGroupId: !Ref ProdBackendSecurityGroup  # EKS backend allow
       SecurityGroupEgress:
         - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: RdsSecurityGroup
-
-  #EKS IAM ROLE
-  EKSControlPlaneRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: EKSControlPlaneRole
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - eks.amazonaws.com
-                - ec2.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
-      Tags:
-        - Key: Name
-          Value: EKSControlPlaneRole
-  
-  EKSWorkerNodeRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: EKSWorkerNodeRole
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - eks.amazonaws.com
-                - ec2.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
-        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
-      Tags:
-        - Key: Name
-          Value: EKSWorkerNodeRole
+          Value: Prod-DB-Security-Group
 
   #EKS 
-  DEVEKS:
+  ProdEks:
     Type: AWS::EKS::Cluster
     Properties:
-      Name: DEVEKS
-      RoleArn: !GetAtt EKSControlPlaneRole.Arn
+      Name: Prod-Eks
+      RoleArn: arn:aws:iam::605134473022:role/EKSControlPlaneRole
       Logging:
         ClusterLogging:
           EnabledTypes:
@@ -341,69 +298,86 @@ Resources:
         IpFamily: ipv4
       ResourcesVpcConfig:
         SubnetIds:
-          - !Ref EKSPrivateSubnetAA
-          - !Ref EKSPrivateSubnetBB
+          - !Ref ProdVpcPrivateSubnetA
+          - !Ref ProdVpcPrivateSubnetB
         SecurityGroupIds:
-          - !Ref ALBSecurityGroup
+          - !Ref ProdALBSecurityGroup
         EndpointPublicAccess: false  
         EndpointPrivateAccess: true  
       Tags:
         - Key: Name
-          Value: DEVEKS
+          Value: Prod-Eks
   
   # EKS node group
-  EKSNodeGroup:
+  ProdEKSNodeGroup:
     Type: AWS::EKS::Nodegroup
     Properties:
-      ClusterName: !Ref DEVEKS
-      NodegroupName: EKSNodeGroup
-      NodeRole: !GetAtt EKSWorkerNodeRole.Arn
+      ClusterName: !Ref ProdEks
+      NodegroupName: Prod-EKS-Node-Group
+      NodeRole: arn:aws:iam::605134473022:role/EKSWorkerNodeRole
       ScalingConfig:
         MinSize: 2
         MaxSize: 3
         DesiredSize: 2
       Subnets:
-        - !Ref EKSPrivateSubnetAA
-        - !Ref EKSPrivateSubnetBB
+        - !Ref ProdVpcPrivateSubnetA
+        - !Ref ProdVpcPrivateSubnetB
       InstanceTypes:
         - t3.medium
       DiskSize: 20 
       Tags:
-        Name: "EKSNodeGroup"
+        Name: "Prod-EKS-Node-Group"
     DependsOn:
-      - DEVEKS  
+      - ProdEks  
   
   # RDS Subnet Group
-  RDSSubnetGroup:
+  ProdDBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupName: dev-rds-subnet-group
+      DBSubnetGroupName: Prod-DB-Subnet-Group
       DBSubnetGroupDescription: "RDS subnet group for Multi-AZ"
       SubnetIds:
-        - !Ref RDSPrivateSubnetAA
-        - !Ref RDSPrivateSubnetBB
+        - !Ref ProdVpcPrivateDBSubnetA
+        - !Ref ProdVpcPrivateDBSubnetB
       Tags:
         - Key: Name
-          Value: RDSSubnetGroup
+          Value: Prod-DB-Subnet-Group
 
-  # RDS Instance (Multi-AZ)
-  DevRDS:
+  ProdDB:
     Type: AWS::RDS::DBInstance
     Properties:
-      DBInstanceIdentifier: dev-rds
-      Engine: mysql
-      EngineVersion: "8.0"
+      DBInstanceIdentifier: Prod-DB
+      Engine: postgres
+      EngineVersion: "16.3"
       DBInstanceClass: db.t3.micro
       AllocatedStorage: 20
       MultiAZ: true
-      MasterUsername: admin
-      MasterUserPassword: "SecurePassword123!"
-      DBSubnetGroupName: !Ref RDSSubnetGroup
+      MasterUsername: !Ref DBUsername 
+      MasterUserPassword: !Ref DBPassword  
+      DBSubnetGroupName: !Ref ProdDBSubnetGroup
       VPCSecurityGroups:
-        - !Ref RdsSecurityGroup
+        - !Ref ProdDBSecurityGroup
+      StorageType: gp2 
+      BackupRetentionPeriod: 7  
+      StorageEncrypted: true  
       Tags:
         - Key: Name
-          Value: DevRDS
+          Value: Prod-DB
     DeletionPolicy: Delete
     DependsOn:
-      - RdsSecurityGroup
+      - ProdDBSecurityGroup
+  
+# RDS Instance (Multi-AZ)
+Parameters:
+  DBUsername:
+    Type: String
+    Default: "dbadmin"
+    Description: "Master username for the PostgreSQL database"
+
+  DBPassword:
+    Type: String
+    NoEcho: true  
+    MinLength: 8
+    MaxLength: 41
+    AllowedPattern: "^[a-zA-Z0-9]*$"
+    Description: "Master password for the PostgreSQL database"

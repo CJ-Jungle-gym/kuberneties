@@ -1,17 +1,22 @@
-apiVersion: networking.k8s.io/v1  # 변경된 API 버전
+apiVersion: networking.k8s.io/v1  # 수정된 API 버전
 kind: Ingress
 metadata:
-  name: my-ingress
-  namespace: default
+  name: front-ingress
+  namespace: kube-system
+  annotations:
+    # ALB Ingress Controller의 설정을 추가
+    ingressClassName: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
 spec:
   rules:
-    - host: myapp.example.com
+    - host: olive.junglegym.com  # 실제 서비스의 도메인으로 변경
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: my-service
+                name: olive-front-service  # 실제 서비스 이름으로 변경
                 port:
                   number: 80
