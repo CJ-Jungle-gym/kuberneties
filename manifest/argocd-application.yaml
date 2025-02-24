@@ -16,5 +16,3 @@ spec:
     automated:  # 자동 동기화 활성화
       prune: true  # 불필요한 리소스 삭제
       selfHeal: true  # 상태 복구
-  syncOptions:
-    - CreateNamespace=true  # 네임스페이스 자동 생성
