@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: olive-front
-          image: 605134473022.dkr.ecr.ap-northeast-2.amazonaws.com/olive-front:latest  # ECR에서 가져올 이미지
+          image: 156041411267.dkr.ecr.ap-northeast-2.amazonaws.com/olive-front:v1
           ports:
             - containerPort: 80
           resources:
