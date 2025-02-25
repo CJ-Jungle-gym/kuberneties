@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: olive-front
-          image: 156041411267.dkr.ecr.ap-northeast-2.amazonaws.com/olive-front:v1
+          image: 605134473022.dkr.ecr.ap-northeast-2.amazonaws.com/olive-front:latest
           ports:
             - containerPort: 80
           resources:
