@@ -255,6 +255,14 @@ Resources:
           FromPort: 443
           ToPort: 443
           SourceSecurityGroupId: !Ref ProdALBSecurityGroup
+        - IpProtocol: "tcp"
+          FromPort: 10250
+          ToPort: 10250
+          SourceSecurityGroupId: !Ref ProdALBSecurityGroup
+        - IpProtocol: "tcp"
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref ProdALBSecurityGroup
       SecurityGroupEgress:
         - IpProtocol: "-1"
           CidrIp: 0.0.0.0/0 
@@ -279,6 +287,49 @@ Resources:
       Tags:
         - Key: Name
           Value: Prod-DB-Security-Group
+
+  #EKS IAM ROLE
+  EKSControlPlaneRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EKSControlPlaneRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Tags:
+        - Key: Name
+          Value: EKSControlPlaneRole
+  
+  EKSWorkerNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EKSWorkerNodeRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Tags:
+        - Key: Name
+          Value: EKSWorkerNodeRole
 
   #EKS 
   ProdEks:
